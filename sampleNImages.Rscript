@@ -1,0 +1,48 @@
+library(methods)
+library(GenOrd)
+library(gtools)
+
+cA<-commandArgs(trailingOnly = TRUE)
+N<-as.numeric(cA[1])   # e.g. 100    Number of images to sample
+K<-as.numeric(cA[2])      # e.g. 4    Length and width of image (i.e. sqrt # segmentation elements)
+w<-as.numeric(cA[3])     # e.g. 25   precision
+dL<-as.numeric(cA[4])   # e.g. .04  pa-pb (i.e. minimal detectable difference)
+pa<-as.numeric(cA[5])   # e.g. .12  probability that A outperforms B
+sigma<-as.numeric(cA[6]) # e.g. .70 correlation scale
+probabilities<-rdirichlet(N,c(pa,1-pa-(pa-dL),pa-dL)*w)
+probabilities2<-cbind(probabilities[1:N,1],probabilities[1:N,1]+probabilities[1:N,2])
+
+accDiff<-c(seq(1:N)/0)
+
+D<- dist(cbind(matrix(matrix(c(seq(1:K)),K,K),K*K,1),matrix(t(matrix(c(seq(1:K)),K,K)),K*K,1)),'euclidean',T,T)
+R<-as.matrix(exp(-D^2/sigma^2))+diag(K*K)
+Support<-rep(list(c(-1,0,1)),K*K)
+
+start<-proc.time()['elapsed']
+check<-start
+
+# Run outside the try to fail early
+it=1
+Marginal<-rep(list(probabilities2[it,1:2]),K*K)
+DataOrd<-ordsample(1,Marginal,R,Support)
+accDiff[it]<-mean(DataOrd)
+
+filename = paste('accuracySamples','K',K,'w',w,'dL',dL*100,'pa',pa*1000,'sigma',sigma*100,'id', floor(runif(1,10000000,99999999)),sep='_')
+
+for (it in 2:N)
+{
+try({
+Marginal<-rep(list(probabilities2[it,1:2]),K*K)
+DataOrd<-ordsample(1,Marginal,R,Support)
+accDiff[it]<-mean(DataOrd)
+})
+if (proc.time()['elapsed']-check>60) 
+ {
+  save(accDiff,probabilities,N,K,pa,dL,w,sigma,file=paste('~/output/samples_',filename,'.RData',sep=''))
+  check<-proc.time()['elapsed']
+ }
+}
+
+save(accDiff,probabilities,N,K,pa,dL,w,sigma,file=paste('~/output/samples_',filename,'.RData',sep=''))
+
+
